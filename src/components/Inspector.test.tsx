@@ -95,4 +95,25 @@ describe('Inspector', () => {
     expect(screen.getByText('Cadence')).toBeInTheDocument()
     expect(screen.getByText('Weekly')).toBeInTheDocument()
   })
+
+  it('shows relationships with clickable links', () => {
+    render(<Inspector {...defaultProps} entry={mockEntry} content={mockContent} />)
+    expect(screen.getByText('Belongs to')).toBeInTheDocument()
+    expect(screen.getByText('Grow Newsletter')).toBeInTheDocument()
+    expect(screen.getByText('Related to')).toBeInTheDocument()
+    expect(screen.getByText('Software Development')).toBeInTheDocument()
+  })
+
+  it('navigates when a relationship link is clicked', () => {
+    const onNavigate = vi.fn()
+    render(<Inspector {...defaultProps} entry={mockEntry} content={mockContent} onNavigate={onNavigate} />)
+    fireEvent.click(screen.getByText('Grow Newsletter'))
+    expect(onNavigate).toHaveBeenCalledWith('grow newsletter')
+  })
+
+  it('shows "No relationships" when entry has no belongsTo/relatedTo', () => {
+    const noRels = { ...mockEntry, belongsTo: [], relatedTo: [] }
+    render(<Inspector {...defaultProps} entry={noRels} content={mockContent} />)
+    expect(screen.getByText('No relationships')).toBeInTheDocument()
+  })
 })

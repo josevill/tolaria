@@ -32,6 +32,60 @@ function countWords(content: string | null): number {
   return words.length
 }
 
+/** Extract display name from a wikilink like "[[responsibility/grow-newsletter]]" */
+function wikilinkDisplay(ref: string): string {
+  const inner = ref.replace(/^\[\[|\]\]$/g, '')
+  // Take last path segment and convert to title case
+  const last = inner.split('/').pop() ?? inner
+  return last.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/** Extract the raw target for navigation from a wikilink ref */
+function wikilinkTarget(ref: string): string {
+  return ref.replace(/^\[\[|\]\]$/g, '').split('/').pop()?.replace(/-/g, ' ') ?? ref
+}
+
+function RelationshipGroup({ label, refs, onNavigate }: { label: string; refs: string[]; onNavigate: (target: string) => void }) {
+  if (refs.length === 0) return null
+  return (
+    <div className="inspector__rel-group">
+      <span className="inspector__rel-label">{label}</span>
+      <div className="inspector__rel-links">
+        {refs.map((ref) => (
+          <button
+            key={ref}
+            className="inspector__rel-link"
+            onClick={() => onNavigate(wikilinkTarget(ref))}
+          >
+            {wikilinkDisplay(ref)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RelationshipsPanel({ entry, onNavigate }: { entry: VaultEntry; onNavigate: (target: string) => void }) {
+  const hasAny = entry.belongsTo.length > 0 || entry.relatedTo.length > 0
+
+  if (!hasAny) {
+    return (
+      <div className="inspector__section">
+        <h4>Relationships</h4>
+        <p className="inspector__empty">No relationships</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="inspector__section">
+      <h4>Relationships</h4>
+      <RelationshipGroup label="Belongs to" refs={entry.belongsTo} onNavigate={onNavigate} />
+      <RelationshipGroup label="Related to" refs={entry.relatedTo} onNavigate={onNavigate} />
+    </div>
+  )
+}
+
 function PropertiesPanel({ entry, content }: { entry: VaultEntry; content: string | null }) {
   const statusColor = entry.status ? STATUS_COLORS[entry.status] ?? '#888' : undefined
   const wordCount = countWords(content)
@@ -97,17 +151,22 @@ export function Inspector({ collapsed, onToggle, entry, content, entries, onNavi
       {!collapsed && (
         <div className="inspector__content">
           {entry ? (
-            <PropertiesPanel entry={entry} content={content} />
+            <>
+              <PropertiesPanel entry={entry} content={content} />
+              <RelationshipsPanel entry={entry} onNavigate={onNavigate} />
+            </>
           ) : (
-            <div className="inspector__section">
-              <h4>Properties</h4>
-              <p className="inspector__empty">No note selected</p>
-            </div>
+            <>
+              <div className="inspector__section">
+                <h4>Properties</h4>
+                <p className="inspector__empty">No note selected</p>
+              </div>
+              <div className="inspector__section">
+                <h4>Relationships</h4>
+                <p className="inspector__empty">No relationships</p>
+              </div>
+            </>
           )}
-          <div className="inspector__section">
-            <h4>Relationships</h4>
-            <p className="inspector__empty">No relationships</p>
-          </div>
         </div>
       )}
     </aside>

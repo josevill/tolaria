@@ -111,3 +111,36 @@
   border-color: #555;
   color: #888;
 }
+
+/* Relationships */
+.inspector__rel-group {
+  margin-bottom: 10px;
+}
+
+.inspector__rel-label {
+  display: block;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.inspector__rel-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inspector__rel-link {
+  background: none;
+  border: none;
+  color: #7eb8da;
+  font-size: 13px;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.inspector__rel-link:hover {
+  color: #a8d8f0;
+  text-decoration: underline;
+}
