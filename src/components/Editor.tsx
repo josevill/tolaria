@@ -77,7 +77,9 @@ function BlockNoteTab({ content, onNavigateWikilink }: { content: string; onNavi
   // Load markdown content into editor
   useEffect(() => {
     async function load() {
-      const blocks = await editor.tryParseMarkdownToBlocks(body)
+      // Convert [[target]] wiki-links to markdown links with wikilink: protocol
+      const preprocessed = body.replace(/\[\[([^\]]+)\]\]/g, (_match, target) => `[${target}](https://wikilink.internal/${encodeURIComponent(target)})`)
+      const blocks = await editor.tryParseMarkdownToBlocks(preprocessed)
       editor.replaceBlocks(editor.document, blocks)
     }
     load()
@@ -93,7 +95,12 @@ function BlockNoteTab({ content, onNavigateWikilink }: { content: string; onNavi
       const link = target.closest('a')
       if (!link) return
       const href = link.getAttribute('href') || ''
-      if (href && !href.startsWith('http://') && !href.startsWith('https://')) {
+      if (href && href.startsWith('https://wikilink.internal/')) {
+        e.preventDefault()
+        e.stopPropagation()
+        const target = decodeURIComponent(href.replace('https://wikilink.internal/', ''))
+        navigateRef.current(target)
+      } else if (href && !href.startsWith('http://') && !href.startsWith('https://')) {
         e.preventDefault()
         e.stopPropagation()
         navigateRef.current(href)
