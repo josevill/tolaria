@@ -1,20 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { EditorState } from '@codemirror/state'
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
-import { markdown } from '@codemirror/lang-markdown'
-import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from '@codemirror/language'
-import {
-  livePreviewPlugin,
-  markdownStylePlugin,
-  editorTheme as libraryEditorTheme,
-  mouseSelectingField,
-  collapseOnSelectionFacet,
-  setMouseSelecting,
-  linkPlugin,
-  codeBlockField,
-} from 'codemirror-live-markdown'
-import { frontmatterHide, findFrontmatter } from './frontmatterHide'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { BlockNoteSchema, defaultInlineContentSpecs } from '@blocknote/core'
+import { filterSuggestionItems } from '@blocknote/core/extensions'
+import { createReactInlineContentSpec, useCreateBlockNote, SuggestionMenuController } from '@blocknote/react'
+import { BlockNoteView } from '@blocknote/mantine'
+import '@blocknote/mantine/style.css'
 import type { VaultEntry } from '../types'
 import './Editor.css'
 
@@ -26,6 +15,7 @@ interface Tab {
 interface EditorProps {
   tabs: Tab[]
   activeTabPath: string | null
+  entries: VaultEntry[]
   onSwitchTab: (path: string) => void
   onCloseTab: (path: string) => void
   onNavigateWikilink: (target: string) => void
@@ -33,75 +23,104 @@ interface EditorProps {
   isModified?: (path: string) => boolean
 }
 
-/** Theme overrides — maps the library's colors to our CSS variables for light/dark support */
-const editorThemeOverrides = EditorView.theme({
-  '&': {
-    fontSize: '15px',
-    backgroundColor: 'var(--bg-primary)',
-    color: 'var(--text-primary)',
+// --- Custom Inline Content: WikiLink ---
+
+const WikiLink = createReactInlineContentSpec(
+  {
+    type: "wikilink" as const,
+    propSchema: {
+      target: { default: "" },
+    },
+    content: "none",
   },
-  '.cm-scroller': {
-    padding: '20px 0',
-  },
-  '.cm-content': {
-    padding: '0 40px',
-    maxWidth: '760px',
-    caretColor: 'var(--text-primary)',
-  },
-  '.cm-gutters': {
-    background: 'var(--bg-primary)',
-    border: 'none',
-    color: 'var(--text-faint)',
-  },
-  '.cm-activeLineGutter': {
-    background: 'var(--bg-hover-subtle)',
-  },
-  '.cm-activeLine': {
-    background: 'rgba(128, 128, 128, 0.06)',
-  },
-  '.cm-cursor': {
-    borderLeftColor: 'var(--text-primary)',
-    borderLeftWidth: '1.5px',
-  },
-  '.cm-selectionBackground': {
-    background: 'var(--bg-selected) !important',
-  },
-  '&.cm-focused .cm-selectionBackground': {
-    background: 'var(--bg-selected) !important',
-  },
-  // Override library heading/inline colors to use our CSS variables
-  '.cm-header-1, .cm-header-2, .cm-header-3, .cm-header-4, .cm-header-5, .cm-header-6': {
-    color: 'var(--text-heading)',
-  },
-  '.cm-strong': {
-    color: 'var(--text-primary)',
-  },
-  '.cm-emphasis': {
-    color: 'var(--text-primary)',
-  },
-  '.cm-strikethrough': {
-    color: 'var(--text-tertiary)',
-  },
-  '.cm-code': {
-    backgroundColor: 'var(--bg-hover-subtle)',
-    fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", monospace',
-    fontSize: '0.9em',
-  },
-  '.cm-link': {
-    color: 'var(--accent-blue)',
-  },
-  '.cm-wikilink': {
-    color: 'var(--accent-blue)',
-    borderBottom: '1px dotted var(--accent-blue)',
-    textDecoration: 'none',
-  },
-  '.cm-formatting-inline': {
-    color: 'var(--text-faint)',
-  },
-  '.cm-formatting-block': {
-    color: 'var(--text-faint)',
+  {
+    render: (props) => (
+      <span
+        className="wikilink"
+        data-target={props.inlineContent.props.target}
+      >
+        {props.inlineContent.props.target}
+      </span>
+    ),
+  }
+)
+
+// --- Schema with wikilink ---
+
+const schema = BlockNoteSchema.create({
+  inlineContentSpecs: {
+    ...defaultInlineContentSpecs,
+    wikilink: WikiLink,
   },
 })
+
+type EditorType = typeof schema.BlockNoteEditorType
+
+/** Strip YAML frontmatter from markdown, returning [frontmatter, body] */
+function splitFrontmatter(content: string): [string, string] {
+  if (!content.startsWith('---')) return ['', content]
+  const end = content.indexOf('\n---', 3)
+  if (end === -1) return ['', content]
+  let to = end + 4
+  if (content[to] === '\n') to++
+  return [content.slice(0, to), content.slice(to)]
+}
+
+// Wikilink placeholder tokens for markdown round-trip
+const WL_START = '\u2039WIKILINK:'
+const WL_END = '\u203A'
+const WL_RE = new RegExp(`${WL_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^${WL_END}]+)${WL_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g')
+
+/** Pre-process markdown: replace [[target]] with placeholder tokens */
+function preProcessWikilinks(md: string): string {
+  return md.replace(/\[\[([^\]]+)\]\]/g, (_m, target) => `${WL_START}${target}${WL_END}`)
+}
+
+/** Walk blocks and replace placeholder text with wikilink inline content */
+function injectWikilinks(blocks: any[]): any[] {
+  return blocks.map(block => {
+    if (block.content && Array.isArray(block.content)) {
+      block.content = expandWikilinksInContent(block.content)
+    }
+    if (block.children && Array.isArray(block.children)) {
+      block.children = injectWikilinks(block.children)
+    }
+    return block
+  })
+}
+
+function expandWikilinksInContent(content: any[]): any[] {
+  const result: any[] = []
+  for (const item of content) {
+    if (item.type === 'text' && typeof item.text === 'string' && item.text.includes(WL_START)) {
+      // Split this text node around wikilink placeholders
+      const text = item.text as string
+      let lastIndex = 0
+      WL_RE.lastIndex = 0
+      let match
+      while ((match = WL_RE.exec(text)) !== null) {
+        // Text before this match
+        if (match.index > lastIndex) {
+          result.push({ ...item, text: text.slice(lastIndex, match.index) })
+        }
+        // The wikilink
+        result.push({
+          type: 'wikilink',
+          props: { target: match[1] },
+          content: undefined,
+        })
+        lastIndex = match.index + match[0].length
+      }
+      // Text after last match
+      if (lastIndex < text.length) {
+        result.push({ ...item, text: text.slice(lastIndex) })
+      }
+    } else {
+      result.push(item)
+    }
+  }
+  return result
+}
 
 function DiffView({ diff }: { diff: string }) {
   if (!diff) {
@@ -139,12 +158,81 @@ function DiffView({ diff }: { diff: string }) {
   )
 }
 
-export function Editor({ tabs, activeTabPath, onSwitchTab, onCloseTab, onNavigateWikilink, onLoadDiff, isModified }: EditorProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<EditorView | null>(null)
+/** Inner component that creates/manages BlockNote for a single tab */
+function BlockNoteTab({ content, entries, onNavigateWikilink }: { content: string; entries: VaultEntry[]; onNavigateWikilink: (target: string) => void }) {
+  const [, body] = useMemo(() => splitFrontmatter(content), [content])
   const navigateRef = useRef(onNavigateWikilink)
   navigateRef.current = onNavigateWikilink
 
+  const editor = useCreateBlockNote({ schema })
+
+  // Load markdown content into editor, converting [[target]] to wikilink inline content
+  useEffect(() => {
+    async function load() {
+      const preprocessed = preProcessWikilinks(body)
+      const blocks = await editor.tryParseMarkdownToBlocks(preprocessed)
+      const withWikilinks = injectWikilinks(blocks)
+      editor.replaceBlocks(editor.document, withWikilinks)
+    }
+    load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body])
+
+  // Click handler for wikilinks
+  useEffect(() => {
+    const container = document.querySelector('.editor__blocknote-container')
+    if (!container) return
+    const handler = (e: MouseEvent) => {
+      const wikilink = (e.target as HTMLElement).closest('.wikilink')
+      if (wikilink) {
+        e.preventDefault()
+        e.stopPropagation()
+        const target = (wikilink as HTMLElement).dataset.target
+        if (target) navigateRef.current(target)
+      }
+    }
+    container.addEventListener('click', handler as EventListener, true)
+    return () => container.removeEventListener('click', handler as EventListener, true)
+  }, [editor])
+
+  // Suggestion menu items for [[ trigger
+  const getWikilinkItems = useCallback(async (query: string) => {
+    const items = entries.map(entry => ({
+      title: entry.title,
+      onItemClick: () => {
+        editor.insertInlineContent([
+          {
+            type: 'wikilink' as const,
+            props: { target: entry.title },
+          },
+          " ",
+        ])
+      },
+      aliases: [entry.filename.replace(/\.md$/, ''), ...entry.aliases],
+      group: entry.isA || 'Note',
+    }))
+    return filterSuggestionItems(items, query)
+  }, [entries, editor])
+
+  const isDark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') !== 'light'
+
+  return (
+    <div className="editor__blocknote-container">
+      <BlockNoteView
+        editor={editor}
+        theme={isDark ? 'dark' : 'light'}
+      >
+        {/* Wikilink suggestion menu triggered by [[ */}
+        <SuggestionMenuController
+          triggerCharacter="[["
+          getItems={getWikilinkItems}
+        />
+      </BlockNoteView>
+    </div>
+  )
+}
+
+export function Editor({ tabs, activeTabPath, entries, onSwitchTab, onCloseTab, onNavigateWikilink, onLoadDiff, isModified }: EditorProps) {
   const [diffMode, setDiffMode] = useState(false)
   const [diffContent, setDiffContent] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
@@ -152,7 +240,6 @@ export function Editor({ tabs, activeTabPath, onSwitchTab, onCloseTab, onNavigat
   const activeTab = tabs.find((t) => t.entry.path === activeTabPath) ?? null
   const showDiffToggle = activeTab && isModified?.(activeTab.entry.path)
 
-  // Reset diff mode when switching tabs
   useEffect(() => {
     setDiffMode(false)
     setDiffContent(null)
@@ -176,78 +263,6 @@ export function Editor({ tabs, activeTabPath, onSwitchTab, onCloseTab, onNavigat
       setDiffLoading(false)
     }
   }, [diffMode, activeTabPath, onLoadDiff])
-
-  // Create/destroy editor view when active tab changes
-  useEffect(() => {
-    if (!containerRef.current || !activeTab || diffMode) return
-
-    // If view already exists for this tab, skip
-    if (viewRef.current) {
-      viewRef.current.destroy()
-      viewRef.current = null
-    }
-
-    // Place cursor after frontmatter so it starts hidden
-    const fmRange = findFrontmatter(activeTab.content)
-    const initialCursor = fmRange ? fmRange[1] : 0
-
-    const state = EditorState.create({
-      doc: activeTab.content,
-      selection: { anchor: initialCursor },
-      extensions: [
-        lineNumbers(),
-        highlightActiveLine(),
-        highlightActiveLineGutter(),
-        history(),
-        bracketMatching(),
-        markdown(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-        // codemirror-live-markdown extensions
-        collapseOnSelectionFacet.of(true),
-        mouseSelectingField,
-        livePreviewPlugin,
-        markdownStylePlugin,
-        libraryEditorTheme,
-        editorThemeOverrides,
-        linkPlugin({
-          onWikiLinkClick: (target) => navigateRef.current(target),
-        }),
-        codeBlockField({ copyButton: true }),
-        frontmatterHide(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
-        EditorView.lineWrapping,
-      ],
-    })
-
-    const view = new EditorView({
-      state,
-      parent: containerRef.current,
-    })
-
-    // Mouse selection tracking for codemirror-live-markdown
-    let destroyed = false
-    view.contentDOM.addEventListener('mousedown', () => {
-      view.dispatch({ effects: setMouseSelecting.of(true) })
-    })
-    const handleMouseUp = () => {
-      requestAnimationFrame(() => {
-        if (!destroyed) {
-          view.dispatch({ effects: setMouseSelecting.of(false) })
-        }
-      })
-    }
-    document.addEventListener('mouseup', handleMouseUp)
-
-    viewRef.current = view
-
-    return () => {
-      destroyed = true
-      document.removeEventListener('mouseup', handleMouseUp)
-      view.destroy()
-      viewRef.current = null
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTabPath, activeTab?.content, diffMode])
 
   if (tabs.length === 0) {
     return (
@@ -300,7 +315,14 @@ export function Editor({ tabs, activeTabPath, onSwitchTab, onCloseTab, onNavigat
           <DiffView diff={diffContent ?? ''} />
         </div>
       ) : (
-        <div className="editor__cm-container" ref={containerRef} />
+        activeTab && (
+          <BlockNoteTab
+            key={activeTabPath}
+            content={activeTab.content}
+            entries={entries}
+            onNavigateWikilink={onNavigateWikilink}
+          />
+        )
       )}
     </div>
   )

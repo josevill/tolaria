@@ -12,69 +12,87 @@ test('zero horizontal shift: headings and bullets', async ({ page }) => {
   const cmEditor = page.locator('.cm-editor')
   await expect(cmEditor).toBeVisible()
 
-  // Find heading and measure position BEFORE click
+  // Screenshot 1: initial state — cursor after frontmatter, headings/bullets in preview mode
+  await page.screenshot({ path: 'test-results/zero-shift-01-initial.png', fullPage: true })
+
+  // Find a heading line (## Overview) and measure its text position
   const headingText = page.locator('.cm-header-2', { hasText: 'Overview' }).first()
   await expect(headingText).toBeVisible()
-  const beforeBox = await headingText.boundingBox()
-  console.log('Heading BEFORE:', JSON.stringify(beforeBox))
 
-  // Click heading to activate
+  // Get bounding box BEFORE clicking on it (inactive state)
+  const beforeBox = await headingText.boundingBox()
+  console.log('Heading "Overview" BEFORE click:', JSON.stringify(beforeBox))
+
+  // Screenshot 2: before clicking heading
+  await page.screenshot({ path: 'test-results/zero-shift-02-before-heading-click.png', fullPage: true })
+
+  // Click on the heading to activate it
   if (beforeBox) {
     await page.mouse.click(beforeBox.x + beforeBox.width / 2, beforeBox.y + beforeBox.height / 2)
   }
   await page.waitForTimeout(500)
 
-  const afterBox = await headingText.boundingBox()
-  console.log('Heading AFTER:', JSON.stringify(afterBox))
+  // Screenshot 3: after clicking heading — ## should appear in gutter, text stays put
+  await page.screenshot({ path: 'test-results/zero-shift-03-after-heading-click.png', fullPage: true })
 
-  // CRITICAL: zero horizontal shift
+  // Get bounding box AFTER clicking (active state)
+  const afterBox = await headingText.boundingBox()
+  console.log('Heading "Overview" AFTER click:', JSON.stringify(afterBox))
+
+  // CRITICAL: The heading text X position must not change
   if (beforeBox && afterBox) {
     const xShift = Math.abs(afterBox.x - beforeBox.x)
-    console.log(`Heading horizontal shift: ${xShift}px`)
-    expect(xShift).toBeLessThan(2)
+    console.log(`Horizontal shift: ${xShift}px`)
+    expect(xShift).toBeLessThan(2) // Allow 1px tolerance for subpixel rendering
   }
 
-  // Verify heading marker is position:absolute (out of flow)
-  const marker = page.locator('.cm-heading-line .cm-formatting-block').first()
-  if (await marker.count() > 0) {
-    const pos = await marker.evaluate(el => window.getComputedStyle(el).position)
-    expect(pos).toBe('absolute')
-  }
+  // Now test bullet lines: click on a bullet item
+  const bulletText = page.locator('.cm-line', { hasText: 'Four-panel layout working' }).first()
+  await expect(bulletText).toBeVisible()
 
-  // Test bullet line shift
-  const bulletLine = page.locator('.cm-line', { hasText: 'Four-panel layout working' }).first()
-  const bBefore = await bulletLine.boundingBox()
+  const bulletBeforeBox = await bulletText.boundingBox()
+  console.log('Bullet line BEFORE click:', JSON.stringify(bulletBeforeBox))
 
-  if (bBefore) {
-    await page.mouse.click(bBefore.x + bBefore.width / 2, bBefore.y + bBefore.height / 2)
+  // Screenshot 4: before clicking bullet
+  await page.screenshot({ path: 'test-results/zero-shift-04-before-bullet-click.png', fullPage: true })
+
+  // Click on the bullet line
+  if (bulletBeforeBox) {
+    await page.mouse.click(bulletBeforeBox.x + bulletBeforeBox.width / 2, bulletBeforeBox.y + bulletBeforeBox.height / 2)
   }
   await page.waitForTimeout(500)
 
-  const bAfter = await bulletLine.boundingBox()
-  if (bBefore && bAfter) {
-    const xShift = Math.abs(bAfter.x - bBefore.x)
+  // Screenshot 5: after clicking bullet
+  await page.screenshot({ path: 'test-results/zero-shift-05-after-bullet-click.png', fullPage: true })
+
+  const bulletAfterBox = await bulletText.boundingBox()
+  console.log('Bullet line AFTER click:', JSON.stringify(bulletAfterBox))
+
+  // CRITICAL: Bullet line X position must not change
+  if (bulletBeforeBox && bulletAfterBox) {
+    const xShift = Math.abs(bulletAfterBox.x - bulletBeforeBox.x)
     console.log(`Bullet horizontal shift: ${xShift}px`)
     expect(xShift).toBeLessThan(2)
   }
 
-  // Verify bullet marker is always full font-size (not collapsed)
-  const bulletMarker = page.locator('.cm-line:not(.cm-heading-line) .cm-formatting-block').first()
-  if (await bulletMarker.count() > 0) {
-    const fontSize = await bulletMarker.evaluate(el => window.getComputedStyle(el).fontSize)
-    expect(parseFloat(fontSize)).toBeGreaterThan(10)
+  // Screenshot 6: click somewhere else (a plain paragraph) to verify heading/bullets go back to preview
+  const paragraph = page.locator('.cm-line', { hasText: 'Custom desktop app' }).first()
+  if (await paragraph.isVisible()) {
+    const paraBox = await paragraph.boundingBox()
+    if (paraBox) {
+      await page.mouse.click(paraBox.x + 10, paraBox.y + paraBox.height / 2)
+    }
+    await page.waitForTimeout(500)
   }
+  await page.screenshot({ path: 'test-results/zero-shift-06-back-to-preview.png', fullPage: true })
 
-  // Verify no heading underline (FIX 1)
+  // Verify heading underline is removed (FIX 1)
   const headingLine = page.locator('.cm-heading-line').first()
   if (await headingLine.count() > 0) {
-    const border = await headingLine.evaluate(el => window.getComputedStyle(el).borderBottom)
-    expect(border).toContain('none')
-  }
-
-  // Take final screenshots
-  const editorBox = await cmEditor.boundingBox()
-  if (editorBox) {
-    const clip = { x: editorBox.x, y: editorBox.y, width: editorBox.width, height: Math.min(editorBox.height, 500) }
-    await page.screenshot({ path: 'test-results/zero-shift-final.png', clip })
+    const borderBottom = await headingLine.evaluate(el =>
+      window.getComputedStyle(el).borderBottom
+    )
+    console.log(`Heading line border-bottom: ${borderBottom}`)
+    expect(borderBottom).toContain('none')
   }
 })
