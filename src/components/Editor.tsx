@@ -163,6 +163,21 @@ export const Editor = memo(function Editor({
   // Cache parsed blocks per tab path for instant switching
   const tabCacheRef = useRef<Map<string, any[]>>(new Map())
   const prevActivePathRef = useRef<string | null>(null)
+  const editorMountedRef = useRef(false)
+  const pendingSwapRef = useRef<(() => void) | null>(null)
+
+  // Track editor mount state
+  useEffect(() => {
+    const cleanup = editor.onMount(() => {
+      editorMountedRef.current = true
+      // Execute any pending content swap that was queued before mount
+      if (pendingSwapRef.current) {
+        pendingSwapRef.current()
+        pendingSwapRef.current = null
+      }
+    })
+    return cleanup
+  }, [editor])
 
   // Swap document content when active tab changes
   useEffect(() => {
@@ -170,7 +185,7 @@ export const Editor = memo(function Editor({
     const prevPath = prevActivePathRef.current
 
     // Save current editor state for the tab we're leaving
-    if (prevPath && prevPath !== activeTabPath) {
+    if (prevPath && prevPath !== activeTabPath && editorMountedRef.current) {
       cache.set(prevPath, editor.document)
     }
     prevActivePathRef.current = activeTabPath
@@ -180,23 +195,34 @@ export const Editor = memo(function Editor({
     const tab = tabs.find(t => t.entry.path === activeTabPath)
     if (!tab) return
 
+    const applyBlocks = (blocks: any[]) => {
+      editor.replaceBlocks(editor.document, blocks)
+    }
+
     try {
       if (cache.has(activeTabPath)) {
         // Instant switch — use cached blocks
-        editor.replaceBlocks(editor.document, cache.get(activeTabPath)!)
+        const cached = cache.get(activeTabPath)!
+        if (editorMountedRef.current) {
+          applyBlocks(cached)
+        } else {
+          pendingSwapRef.current = () => applyBlocks(cached)
+        }
       } else {
         // First open — parse markdown
         const [, body] = splitFrontmatter(tab.content)
         const preprocessed = preProcessWikilinks(body)
+        const targetPath = activeTabPath
         editor.tryParseMarkdownToBlocks(preprocessed).then(blocks => {
           const withWikilinks = injectWikilinks(blocks)
-          try {
-            editor.replaceBlocks(editor.document, withWikilinks)
-          } catch (err) {
-            console.error('Failed to replace blocks:', err)
-            return
+          // Guard: skip if user switched tabs while we were parsing
+          if (prevActivePathRef.current !== targetPath) return
+          cache.set(targetPath, withWikilinks)
+          if (editorMountedRef.current) {
+            applyBlocks(withWikilinks)
+          } else {
+            pendingSwapRef.current = () => applyBlocks(withWikilinks)
           }
-          cache.set(activeTabPath, withWikilinks)
         })
       }
     } catch (err) {

@@ -19,6 +19,7 @@ vi.mock('@blocknote/react', () => ({
     replaceBlocks: () => {},
     document: [],
     insertInlineContent: () => {},
+    onMount: (cb: () => void) => { cb(); return () => {} },
   }),
   SuggestionMenuController: () => null,
 }))
