@@ -50,6 +50,11 @@ export function Sidebar({ entries, selection, onSelect, onSelectNote, modifiedCo
     setCollapsed((prev) => ({ ...prev, [type]: !prev[type] }))
   }
 
+  const getSectionColor = (entry: VaultEntry) => {
+    const section = SECTION_GROUPS.find(s => s.type === entry.isA)
+    return section?.color || 'var(--foreground)'
+  }
+
   const isActive = (sel: SidebarSelection): boolean => {
     if (selection.kind !== sel.kind) return false
     if (sel.kind === 'filter' && selection.kind === 'filter') return sel.filter === selection.filter
@@ -207,8 +212,8 @@ export function Sidebar({ entries, selection, onSelect, onSelectNote, modifiedCo
                       style={{
                         padding: '4px 16px 4px 28px',
                         ...(isActive(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry }) && {
-                          backgroundColor: 'var(--accent-red-light)',
-                          color: 'var(--accent-red)',
+                          backgroundColor: `${getSectionColor(entry).replace(')', '-light)')}`,
+                          color: getSectionColor(entry),
                         }),
                       }}
                       onClick={() => {
