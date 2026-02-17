@@ -42,28 +42,44 @@ function wikilinkTarget(ref: string): string {
   return pipeIdx !== -1 ? inner.slice(0, pipeIdx) : inner
 }
 
-function RelationshipGroup({ label, refs, onNavigate }: { label: string; refs: string[]; onNavigate: (target: string) => void }) {
+function resolveRefType(ref: string, entries: VaultEntry[]): string | undefined {
+  const target = wikilinkTarget(ref)
+  const match = entries.find((e) => {
+    const stem = e.path.replace(/^.*\/Laputa\//, '').replace(/\.md$/, '')
+    if (stem === target) return true
+    const fileStem = e.filename.replace(/\.md$/, '')
+    if (fileStem === target.split('/').pop()) return true
+    return false
+  })
+  return match?.isA
+}
+
+function RelationshipGroup({ label, refs, entries, onNavigate }: { label: string; refs: string[]; entries: VaultEntry[]; onNavigate: (target: string) => void }) {
   if (refs.length === 0) return null
   return (
     <div className="mb-2.5">
       <span className="mb-1 block text-xs font-semibold text-foreground">{label}</span>
       <div className="flex flex-col gap-1">
-        {refs.map((ref, idx) => (
-          <button
-            key={`${ref}-${idx}`}
-            className="border-none text-left text-primary cursor-pointer hover:opacity-80"
-            style={{ background: 'var(--accent-blue-light)', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 500 }}
-            onClick={() => onNavigate(wikilinkTarget(ref))}
-          >
-            {wikilinkDisplay(ref)}
-          </button>
-        ))}
+        {refs.map((ref, idx) => {
+          const refType = resolveRefType(ref, entries)
+          return (
+            <button
+              key={`${ref}-${idx}`}
+              className="flex items-center justify-between gap-2 border-none text-left text-primary cursor-pointer hover:opacity-80"
+              style={{ background: 'var(--accent-blue-light)', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 500 }}
+              onClick={() => onNavigate(wikilinkTarget(ref))}
+            >
+              <span className="flex-1 truncate">{wikilinkDisplay(ref)}</span>
+              {refType && <span className="shrink-0 text-[11px] text-muted-foreground">{refType}</span>}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function DynamicRelationshipsPanel({ frontmatter, onNavigate }: { frontmatter: ParsedFrontmatter; onNavigate: (target: string) => void }) {
+function DynamicRelationshipsPanel({ frontmatter, entries, onNavigate }: { frontmatter: ParsedFrontmatter; entries: VaultEntry[]; onNavigate: (target: string) => void }) {
   const relationshipEntries = useMemo(() => {
     return Object.entries(frontmatter)
       .filter(([key, value]) => RELATIONSHIP_KEYS.has(key) || containsWikilinks(value))
@@ -83,7 +99,7 @@ function DynamicRelationshipsPanel({ frontmatter, onNavigate }: { frontmatter: P
         <p className="m-0 text-[13px] text-muted-foreground">No relationships</p>
       ) : (
         relationshipEntries.map(({ key, refs }) => (
-          <RelationshipGroup key={key} label={key} refs={refs} onNavigate={onNavigate} />
+          <RelationshipGroup key={key} label={key} refs={refs} entries={entries} onNavigate={onNavigate} />
         ))
       )}
       <button
@@ -258,7 +274,7 @@ export function Inspector({
                 onDeleteProperty={onDeleteProperty ? handleDeleteProperty : undefined}
                 onAddProperty={onAddProperty ? handleAddProperty : undefined}
               />
-              <DynamicRelationshipsPanel frontmatter={frontmatter} onNavigate={onNavigate} />
+              <DynamicRelationshipsPanel frontmatter={frontmatter} entries={entries} onNavigate={onNavigate} />
               <BacklinksPanel backlinks={backlinks} onNavigate={onNavigate} />
               <GitHistoryPanel commits={gitHistory} />
             </>
