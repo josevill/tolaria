@@ -4,12 +4,13 @@ interface KeyboardActions {
   onQuickOpen: () => void
   onCreateNote: () => void
   onSave: () => void
+  onTrashNote: (path: string) => void
   activeTabPathRef: React.MutableRefObject<string | null>
   handleCloseTabRef: React.MutableRefObject<(path: string) => void>
 }
 
 export function useAppKeyboard({
-  onQuickOpen, onCreateNote, onSave,
+  onQuickOpen, onCreateNote, onSave, onTrashNote,
   activeTabPathRef, handleCloseTabRef,
 }: KeyboardActions) {
   useEffect(() => {
@@ -36,9 +37,16 @@ export function useAppKeyboard({
           if (path) handleCloseTabRef.current(path)
           break
         }
+        case 'Backspace':
+        case 'Delete': {
+          e.preventDefault()
+          const path = activeTabPathRef.current
+          if (path) onTrashNote(path)
+          break
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onQuickOpen, onCreateNote, onSave, activeTabPathRef, handleCloseTabRef])
+  }, [onQuickOpen, onCreateNote, onSave, onTrashNote, activeTabPathRef, handleCloseTabRef])
 }

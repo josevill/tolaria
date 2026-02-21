@@ -48,6 +48,8 @@ interface EditorProps {
   showAIChat?: boolean
   onToggleAIChat?: () => void
   vaultPath?: string
+  onTrashNote?: (path: string) => void
+  onRestoreNote?: (path: string) => void
 }
 
 // --- Custom Inline Content: WikiLink ---
@@ -151,6 +153,7 @@ export const Editor = memo(function Editor({
   onUpdateFrontmatter, onDeleteProperty, onAddProperty,
   showAIChat, onToggleAIChat,
   vaultPath,
+  onTrashNote, onRestoreNote,
 }: EditorProps) {
   const [diffMode, setDiffMode] = useState(false)
   const [diffContent, setDiffContent] = useState<string | null>(null)
@@ -360,6 +363,8 @@ export const Editor = memo(function Editor({
       onToggleAIChat={onToggleAIChat}
       inspectorCollapsed={inspectorCollapsed}
       onToggleInspector={onToggleInspector}
+      onTrash={onTrashNote ? () => onTrashNote(activeTab.entry.path) : undefined}
+      onRestore={onRestoreNote ? () => onRestoreNote(activeTab.entry.path) : undefined}
     />
   ) : null
 

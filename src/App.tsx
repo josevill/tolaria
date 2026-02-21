@@ -112,10 +112,26 @@ function App() {
     vault.updateEntry(typeEntry.path, { icon, color })
   }, [vault, notes])
 
+  const handleTrashNote = useCallback(async (path: string) => {
+    const now = new Date().toISOString().slice(0, 10)
+    await notes.handleUpdateFrontmatter(path, 'trashed', true)
+    await notes.handleUpdateFrontmatter(path, 'trashed_at', now)
+    vault.updateEntry(path, { trashed: true, trashedAt: Date.now() / 1000 })
+    setToastMessage('Note moved to trash')
+  }, [notes, vault, setToastMessage])
+
+  const handleRestoreNote = useCallback(async (path: string) => {
+    await notes.handleUpdateFrontmatter(path, 'trashed', false)
+    await notes.handleDeleteProperty(path, 'trashed_at')
+    vault.updateEntry(path, { trashed: false, trashedAt: null })
+    setToastMessage('Note restored from trash')
+  }, [notes, vault, setToastMessage])
+
   useAppKeyboard({
     onQuickOpen: () => setShowQuickOpen(true),
     onCreateNote: openCreateDialog,
     onSave: () => setToastMessage('Saved'),
+    onTrashNote: handleTrashNote,
     activeTabPathRef: notes.activeTabPathRef,
     handleCloseTabRef: notes.handleCloseTabRef,
   })
@@ -193,6 +209,8 @@ function App() {
             showAIChat={showAIChat}
             onToggleAIChat={() => setShowAIChat(c => !c)}
             vaultPath={vaultPath}
+            onTrashNote={handleTrashNote}
+            onRestoreNote={handleRestoreNote}
           />
         </div>
       </div>

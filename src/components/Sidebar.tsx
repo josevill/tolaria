@@ -136,6 +136,7 @@ export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onS
   )
 
   const archivedCount = useMemo(() => entries.filter((e) => e.archived).length, [entries])
+  const trashedCount = useMemo(() => entries.filter((e) => e.trashed).length, [entries])
 
   // Close context menu on outside click
   useEffect(() => {
@@ -192,7 +193,7 @@ export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onS
   }, [customizeTarget, typeEntryMap, onCustomizeType])
 
   const renderSection = ({ label, type, Icon, customColor }: SectionGroup) => {
-    const items = entries.filter((e) => e.isA === type && !e.archived)
+    const items = entries.filter((e) => e.isA === type && !e.archived && !e.trashed)
     const isCollapsed = collapsed[type] ?? true
     const isTopic = type === 'Topic'
     const isTypeSection = type === 'Type'
@@ -293,7 +294,7 @@ export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onS
         {/* Top nav — All Notes + Favorites */}
         <div className="border-b border-border" style={{ padding: '4px 6px' }}>
           {TOP_NAV.map(({ label, filter, Icon }) => {
-            const count = filter === 'all' ? entries.filter((e) => !e.archived).length : 0
+            const count = filter === 'all' ? entries.filter((e) => !e.archived && !e.trashed).length : 0
             return (
               <div
                 key={filter}
@@ -350,13 +351,27 @@ export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onS
             <TagSimple size={16} />
             <span className="flex-1 text-[13px] font-medium">Untagged</span>
           </div>
+          {/* Trash filter */}
           <div
-            className="flex select-none items-center gap-2 rounded text-foreground"
-            style={{ padding: '6px 16px', borderRadius: 4, opacity: 0.4, cursor: 'not-allowed' }}
-            title="Coming soon"
+            className={cn(
+              "flex cursor-pointer select-none items-center gap-2 rounded transition-colors",
+              isActive({ kind: 'filter', filter: 'trash' })
+                ? "bg-destructive/10 text-destructive"
+                : "text-foreground hover:bg-accent"
+            )}
+            style={{ padding: '6px 16px', borderRadius: 4 }}
+            onClick={() => onSelect({ kind: 'filter', filter: 'trash' })}
           >
             <Trash size={16} />
             <span className="flex-1 text-[13px] font-medium">Trash</span>
+            {trashedCount > 0 && (
+              <span
+                className="flex items-center justify-center text-muted-foreground"
+                style={{ height: 20, borderRadius: 9999, padding: '0 6px', fontSize: 10, background: 'var(--muted)' }}
+              >
+                {trashedCount}
+              </span>
+            )}
           </div>
         </div>
 

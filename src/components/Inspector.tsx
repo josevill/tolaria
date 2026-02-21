@@ -4,7 +4,7 @@ import type { VaultEntry, GitCommit } from '../types'
 import { cn } from '@/lib/utils'
 import {
   SlidersHorizontal, X, Wrench, Flask, Target, ArrowsClockwise,
-  Users, CalendarBlank, Tag, FileText, StackSimple,
+  Users, CalendarBlank, Tag, FileText, StackSimple, Trash,
 } from '@phosphor-icons/react'
 import { parseFrontmatter, type ParsedFrontmatter } from '../utils/frontmatter'
 import { DynamicPropertiesPanel, RELATIONSHIP_KEYS, containsWikilinks } from './DynamicPropertiesPanel'
@@ -84,6 +84,8 @@ function RelationshipGroup({ label, refs, entries, onNavigate }: { label: string
           const resolved = resolveRef(ref, entries)
           const refType = resolved?.isA ?? undefined
           const isArchived = resolved?.archived ?? false
+          const isTrashed = resolved?.trashed ?? false
+          const isDimmed = isArchived || isTrashed
           const color = refType ? getTypeColor(refType) : 'var(--accent-blue)'
           const bgColor = refType ? getTypeLightColor(refType) : 'var(--accent-blue-light)'
           const TypeIcon = getTypeIcon(refType)
@@ -92,19 +94,21 @@ function RelationshipGroup({ label, refs, entries, onNavigate }: { label: string
               key={`${ref}-${idx}`}
               className="flex items-center justify-between gap-2 border-none text-left cursor-pointer hover:opacity-80"
               style={{
-                background: isArchived ? 'var(--muted)' : bgColor,
-                color: isArchived ? 'var(--muted-foreground)' : color,
+                background: isDimmed ? 'var(--muted)' : bgColor,
+                color: isDimmed ? 'var(--muted-foreground)' : color,
                 borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 500,
-                opacity: isArchived ? 0.7 : 1,
+                opacity: isDimmed ? 0.7 : 1,
               }}
               onClick={() => onNavigate(wikilinkTarget(ref))}
-              title={isArchived ? 'Archived' : undefined}
+              title={isTrashed ? 'Trashed' : isArchived ? 'Archived' : undefined}
             >
-              <span className="flex-1 truncate">
+              <span className="flex items-center gap-1 flex-1 truncate">
+                {isTrashed && <Trash size={12} className="shrink-0" />}
                 {wikilinkDisplay(ref)}
-                {isArchived && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.8 }}>(archived)</span>}
+                {isTrashed && <span style={{ fontSize: 10, opacity: 0.8 }}>(trashed)</span>}
+                {isArchived && !isTrashed && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.8 }}>(archived)</span>}
               </span>
-              <TypeIcon width={14} height={14} className="shrink-0" style={{ color: isArchived ? 'var(--muted-foreground)' : color }} />
+              <TypeIcon width={14} height={14} className="shrink-0" style={{ color: isDimmed ? 'var(--muted-foreground)' : color }} />
             </button>
           )
         })}
@@ -182,19 +186,22 @@ function BacklinksPanel({ backlinks, onNavigate }: { backlinks: VaultEntry[]; on
           {backlinks.map((e) => {
             const color = e.isA ? getTypeColor(e.isA) : 'var(--accent-blue)'
             const TypeIcon = getTypeIcon(e.isA ?? undefined)
+            const isDimmed = e.archived || e.trashed
             return (
               <button
                 key={e.path}
                 className="flex items-center justify-between gap-2 border-none bg-transparent p-0 py-1 text-left text-[13px] cursor-pointer hover:opacity-80"
-                style={{ color: e.archived ? 'var(--muted-foreground)' : color, opacity: e.archived ? 0.7 : 1 }}
+                style={{ color: isDimmed ? 'var(--muted-foreground)' : color, opacity: isDimmed ? 0.7 : 1 }}
                 onClick={() => onNavigate(e.title)}
-                title={e.archived ? 'Archived' : undefined}
+                title={e.trashed ? 'Trashed' : e.archived ? 'Archived' : undefined}
               >
-                <span className="flex-1 truncate">
+                <span className="flex items-center gap-1 flex-1 truncate">
+                  {e.trashed && <Trash size={12} className="shrink-0" />}
                   {e.title}
-                  {e.archived && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.8 }}>(archived)</span>}
+                  {e.trashed && <span style={{ fontSize: 10, opacity: 0.8 }}>(trashed)</span>}
+                  {e.archived && !e.trashed && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.8 }}>(archived)</span>}
                 </span>
-                {e.isA && <TypeIcon width={14} height={14} className="shrink-0" style={{ color: e.archived ? 'var(--muted-foreground)' : color }} />}
+                {e.isA && <TypeIcon width={14} height={14} className="shrink-0" style={{ color: isDimmed ? 'var(--muted-foreground)' : color }} />}
               </button>
             )
           })}

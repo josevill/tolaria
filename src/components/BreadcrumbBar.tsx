@@ -8,6 +8,8 @@ import {
   Sparkle,
   SlidersHorizontal,
   DotsThree,
+  Trash,
+  ArrowCounterClockwise,
 } from '@phosphor-icons/react'
 
 interface BreadcrumbBarProps {
@@ -22,6 +24,8 @@ interface BreadcrumbBarProps {
   onToggleAIChat?: () => void
   inspectorCollapsed?: boolean
   onToggleInspector?: () => void
+  onTrash?: () => void
+  onRestore?: () => void
 }
 
 const DISABLED_ICON_STYLE = { opacity: 0.4, cursor: 'not-allowed' } as const
@@ -29,6 +33,7 @@ const DISABLED_ICON_STYLE = { opacity: 0.4, cursor: 'not-allowed' } as const
 export const BreadcrumbBar = memo(function BreadcrumbBar({
   entry, wordCount, isModified, showDiffToggle, diffMode, diffLoading,
   onToggleDiff, showAIChat, onToggleAIChat, inspectorCollapsed, onToggleInspector,
+  onTrash, onRestore,
 }: BreadcrumbBarProps) {
   return (
     <div
@@ -104,6 +109,23 @@ export const BreadcrumbBar = memo(function BreadcrumbBar({
         >
           <Sparkle size={16} weight={showAIChat ? 'fill' : 'regular'} />
         </button>
+        {entry.trashed ? (
+          <button
+            className="flex items-center justify-center border-none bg-transparent p-0 cursor-pointer transition-colors text-muted-foreground hover:text-foreground"
+            onClick={onRestore}
+            title="Restore from trash"
+          >
+            <ArrowCounterClockwise size={16} />
+          </button>
+        ) : (
+          <button
+            className="flex items-center justify-center border-none bg-transparent p-0 cursor-pointer transition-colors text-muted-foreground hover:text-destructive"
+            onClick={onTrash}
+            title="Move to trash (Cmd+Delete)"
+          >
+            <Trash size={16} />
+          </button>
+        )}
         {inspectorCollapsed && (
           <button
             className="flex items-center justify-center border-none bg-transparent p-0 text-muted-foreground cursor-pointer hover:text-foreground transition-colors"

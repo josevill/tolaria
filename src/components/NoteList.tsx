@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import {
   MagnifyingGlass, Plus, Wrench, Flask, Target, ArrowsClockwise,
   Users, CalendarBlank, Tag, FileText, CaretDown, CaretRight, StackSimple,
-  ArrowsDownUp, Check,
+  ArrowsDownUp, Check, Warning,
 } from '@phosphor-icons/react'
 import type { ComponentType, SVGAttributes } from 'react'
 import { getTypeColor, getTypeLightColor } from '../utils/typeColors'
@@ -255,20 +255,22 @@ export function filterEntries(entries: VaultEntry[], selection: SidebarSelection
     case 'filter':
       switch (selection.filter) {
         case 'all':
-          return entries.filter((e) => !e.archived)
+          return entries.filter((e) => !e.archived && !e.trashed)
         case 'favorites':
           return []
         case 'archived':
-          return entries.filter((e) => e.archived)
+          return entries.filter((e) => e.archived && !e.trashed)
+        case 'trash':
+          return entries.filter((e) => e.trashed)
       }
       break
     case 'sectionGroup':
-      return entries.filter((e) => e.isA === selection.type && !e.archived)
+      return entries.filter((e) => e.isA === selection.type && !e.archived && !e.trashed)
     case 'entity':
       return []
     case 'topic': {
       const topic = selection.entry
-      return entries.filter((e) => refsMatch(e.relatedTo, topic) && !e.archived)
+      return entries.filter((e) => refsMatch(e.relatedTo, topic) && !e.archived && !e.trashed)
     }
   }
 }
@@ -350,6 +352,7 @@ function NoteListInner({ entries, selection, selectedNote, allContent, modifiedF
 
   const isEntityView = selection.kind === 'entity'
   const isSectionGroup = selection.kind === 'sectionGroup'
+  const isTrashView = selection.kind === 'filter' && selection.filter === 'trash'
 
   const handleSortChange = useCallback((groupLabel: string, option: SortOption) => {
     setSortPrefs((prev) => {
@@ -421,6 +424,12 @@ function NoteListInner({ entries, selection, selectedNote, allContent, modifiedF
   )
 
 
+  const expiredTrashCount = useMemo(() => {
+    if (!isTrashView) return 0
+    const now = Date.now() / 1000
+    return searched.filter((e) => e.trashedAt && (now - e.trashedAt) >= 86400 * 30).length
+  }, [isTrashView, searched])
+
   const renderItem = useCallback((entry: VaultEntry, isPinned = false) => {
     const isSelected = selectedNote?.path === entry.path && !isPinned
     const te = typeEntryMap[entry.isA ?? '']
@@ -466,13 +475,23 @@ function NoteListInner({ entries, selection, selectedNote, allContent, modifiedF
                 ARCHIVED
               </span>
             )}
+            {entry.trashed && (
+              <span
+                className="ml-1.5 inline-block align-middle"
+                style={{ fontSize: 9, fontWeight: 500, background: 'var(--destructive-light, #ef44441a)', color: 'var(--destructive)', borderRadius: 4, padding: '1px 4px', verticalAlign: 'middle' }}
+              >
+                TRASHED
+              </span>
+            )}
           </div>
         </div>
         <div className="mt-0.5 text-[12px] leading-[1.5] text-muted-foreground" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {entry.snippet}
         </div>
-        <div className="mt-0.5 text-[10px] text-muted-foreground">
-          {relativeDate(getDisplayDate(entry))}
+        <div className="mt-0.5 text-[10px] text-muted-foreground" style={entry.trashed && entry.trashedAt && (Date.now() / 1000 - entry.trashedAt) >= 86400 * 30 ? { color: 'var(--destructive)', fontWeight: 500 } : undefined}>
+          {entry.trashed && entry.trashedAt
+            ? `Trashed ${relativeDate(entry.trashedAt)}${(Date.now() / 1000 - entry.trashedAt) >= 86400 * 30 ? ' — will be permanently deleted' : ''}`
+            : relativeDate(getDisplayDate(entry))}
         </div>
       </div>
     )
@@ -571,7 +590,9 @@ function NoteListInner({ entries, selection, selectedNote, allContent, modifiedF
               ? typeDocument.title
               : selection.kind === 'filter' && (selection as { filter: string }).filter === 'archived'
                 ? 'Archive'
-                : 'Notes'}
+                : selection.kind === 'filter' && (selection as { filter: string }).filter === 'trash'
+                  ? 'Trash'
+                  : 'Notes'}
         </h3>
         <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           {!isEntityView && (
@@ -646,8 +667,27 @@ function NoteListInner({ entries, selection, selectedNote, allContent, modifiedF
                 </div>
               )
             })()}
+            {/* 30-day warning banner for trash view */}
+            {isTrashView && expiredTrashCount > 0 && (
+              <div
+                className="flex items-start gap-2 border-b border-[var(--border)]"
+                style={{ padding: '10px 12px', background: 'color-mix(in srgb, var(--destructive) 6%, transparent)' }}
+              >
+                <Warning size={16} className="shrink-0" style={{ color: 'var(--destructive)', marginTop: 1 }} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--destructive)' }}>
+                    Notes in trash for 30+ days will be permanently deleted
+                  </div>
+                  <div className="text-muted-foreground" style={{ fontSize: 11 }}>
+                    {expiredTrashCount} {expiredTrashCount === 1 ? 'note is' : 'notes are'} past the 30-day retention period
+                  </div>
+                </div>
+              </div>
+            )}
             {searched.length === 0 ? (
-              <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">No notes found</div>
+              <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                {isTrashView ? 'Trash is empty' : 'No notes found'}
+              </div>
             ) : (
               searched.map((entry) => renderItem(entry))
             )}
