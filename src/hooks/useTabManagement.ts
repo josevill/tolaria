@@ -154,7 +154,6 @@ export function useTabManagement() {
     if (savedOrder.length > 0) {
       setTabs((prev) => restoreOrder(prev, savedOrder))
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return {

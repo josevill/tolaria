@@ -188,7 +188,7 @@ function useNoteListData({ entries, selection, allContent, query, listSort, modi
 
   const searched = useMemo(() => {
     if (isEntityView) return []
-    const sorted = [...filterEntries(entries, selection, modifiedFiles)].sort(getSortComparator(listSort))
+    const sorted = [...filterEntries(entries, selection)].sort(getSortComparator(listSort))
     return filterByQuery(sorted, query)
   }, [entries, selection, modifiedFiles, isEntityView, listSort, query])
 
@@ -219,7 +219,7 @@ function NoteListInner({ entries, selection, selectedNote, allContent, modifiedF
   }, [])
 
   const toggleGroup = useCallback((label: string) => {
-    setCollapsedGroups((prev) => { const next = new Set(prev); next.has(label) ? next.delete(label) : next.add(label); return next })
+    setCollapsedGroups((prev) => { const next = new Set(prev); if (next.has(label)) next.delete(label); else next.add(label); return next })
   }, [])
 
   const typeEntryMap = useTypeEntryMap(entries)

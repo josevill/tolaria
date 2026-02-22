@@ -25,7 +25,7 @@ export function estimateTokens(text: string | number): number {
 
 const DEFAULT_CONTEXT_LIMIT = 180_000
 
-export function getContextLimit(_model: string): number {
+export function getContextLimit(): number {
   return DEFAULT_CONTEXT_LIMIT
 }
 
@@ -41,7 +41,7 @@ export function buildSystemPrompt(
     return { prompt: '', totalTokens: 0, truncated: false }
   }
 
-  const contextBudget = Math.floor(getContextLimit(model) * 0.6)
+  const contextBudget = Math.floor(getContextLimit() * 0.6)
   const preamble = [
     'You are a helpful AI assistant integrated into Laputa, a personal knowledge management app.',
     'The user has selected the following notes as context. Use them to answer questions accurately.',
