@@ -950,5 +950,17 @@ describe('NoteList — virtual list with large datasets', () => {
       expect(screen.getByText('Build Laputa App')).toBeInTheDocument()
       expect(screen.queryByText('Facebook Ads Strategy')).not.toBeInTheDocument()
     })
+
+    it('shows modified notes when both getNoteStatus and modifiedFiles are provided', () => {
+      // Regression: App.tsx passes both getNoteStatus and modifiedFiles.
+      // The changes filter must use modifiedFiles for filtering even when getNoteStatus is present.
+      const getNoteStatus = (path: string) => modifiedFiles.some((f) => f.path === path) ? 'modified' as const : 'clean' as const
+      render(
+        <NoteList entries={mockEntries} selection={changesSelection} selectedNote={null} modifiedFiles={modifiedFiles} getNoteStatus={getNoteStatus} onSelectNote={noopSelect} onReplaceActiveTab={noopReplace} allContent={{}} onCreateNote={vi.fn()} />
+      )
+      expect(screen.getByText('Build Laputa App')).toBeInTheDocument()
+      expect(screen.getByText('Facebook Ads Strategy')).toBeInTheDocument()
+      expect(screen.queryByText('Matteo Cellini')).not.toBeInTheDocument()
+    })
   })
 })
